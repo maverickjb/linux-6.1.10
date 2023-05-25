@@ -496,6 +496,14 @@ config VCPU_STALL_DETECTOR
 
 	  If you do not intend to run this kernel as a guest, say N.
 
+config XIAOMI_KEYBOARD
+        bool "xiaomi keyboard control-driver"
+        default n
+        help
+          Say Y here, compile xiaomi keyboard control driver.
+
+          If unsure, say N.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

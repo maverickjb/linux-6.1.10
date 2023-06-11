@@ -9,6 +9,7 @@
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/usb/pd.h>
+#include <dt-bindings/phy/phy.h>
 #include "sm8150.dtsi"
 #include "pm8150.dtsi"
 #include "pm8150b.dtsi"
@@ -159,9 +160,6 @@
 		vin-supply = <&vph_pwr>;
 	};
 
-	/*
-	 * enable ktz8866 output power
-	 */
 	lcd_avdd_5p5: lcd-avdd-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "lcd_avdd_5p5";
@@ -171,7 +169,7 @@
 		regulator-enable-ramp-delay = <233>;
 		gpio = <&tlmm 114 0>;
 		enable-active-high;
-		regulator-always-on;
+//		regulator-always-on;
 		regulator-boot-on;
 	};
 
@@ -184,7 +182,7 @@
 		regulator-enable-ramp-delay = <233>;
 		gpio = <&tlmm 115 0>;
 		enable-active-high;
-		regulator-always-on;
+//		regulator-always-on;
 		regulator-boot-on;
 	};
 };
@@ -428,6 +426,14 @@
 	/* PM8009 is not present on these boards, even if downstream sources suggest so. */
 };
 
+&gmu {
+	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};
+
 &pon_pwrkey {
 	status = "okay";
 };
@@ -524,6 +530,86 @@
 	status = "okay";
 };
 
+&mdss_dsi0 {
+	status = "okay";
+	vdda-supply = <&vreg_l3c_1p2>;
+
+	qcom,dual-dsi-mode;
+	qcom,master-dsi;
+	qcom,sync-dual-dsi;
+
+	panel@0 {
+		compatible = "novatek,nt36523";
+		reg = <0>;
+
+		backlight = <&backlight>;
+		reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
+
+		vddio-supply = <&vreg_l14a_1p88>;
+		avdd-supply = <&lcd_avdd_5p5>;
+		avee-supply = <&lcd_avee_5p5>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				panel_in_0: endpoint {
+					remote-endpoint = <&dsi0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				panel_in_1: endpoint {
+					remote-endpoint = <&dsi1_out>;
+				};
+			};
+		};
+	};
+};
+
+&dsi0_out {
+	data-lanes = <0 1 2>;
+	remote-endpoint = <&panel_in_0>;
+};
+
+&mdss_dsi0_phy {
+	status = "okay";
+	vdds-supply = <&vreg_l5a_0p875>;
+	phy-type = <PHY_TYPE_CPHY>;
+};
+
+&mdss_dsi1 {
+	status = "okay";
+	vdda-supply = <&vreg_l3c_1p2>;
+
+	qcom,dual-dsi-mode;
+	qcom,sync-dual-dsi;
+
+	/* DSI1 is slave, so use DSI0 clocks */
+	assigned-clock-parents = <&mdss_dsi0_phy 0>, <&mdss_dsi0_phy 1>;
+};
+
+&dsi1_out {
+	data-lanes = <0 1 2>;
+	remote-endpoint = <&panel_in_1>;
+};
+
+&mdss_dsi1_phy {
+	status = "okay";
+	vdds-supply = <&vreg_l5a_0p875>;
+	phy-type = <PHY_TYPE_CPHY>;
+};
+
+&mdss {
+	status = "okay";
+};
+
 &ufs_mem_hc {
 	status = "okay";
 
@@ -579,7 +665,7 @@
 };
 
 &usb_1_dwc3 {
-	dr_mode = "host";
+	dr_mode = "peripheral";
 	usb-role-switch;
 };
 

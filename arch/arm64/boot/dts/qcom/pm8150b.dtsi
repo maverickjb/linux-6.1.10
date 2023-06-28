@@ -58,7 +58,7 @@
 			status = "disabled";
 			reg = <0x1100>;
 		};
-#if 1
+
 		pm8150b_typec: typec@1500 {
 			compatible = "qcom,pm8150b-typec";
 			reg = <0x1500>,
@@ -98,7 +98,7 @@
 			vdd-pdphy-supply = <&vreg_l2a_3p1>;
 			vdd-vbus-supply = <&pm8150b_vbus>;
 		};
-#endif
+
 		pm8150b_temp: temp-alarm@2400 {
 			compatible = "qcom,spmi-temp-alarm";
 			reg = <0x2400>;

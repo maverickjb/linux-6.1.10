@@ -719,6 +719,10 @@
 	vdda-pll-supply = <&vreg_l5a_0p875>;
 };
 
+&usb_1_qmpphy_typec_mux_in {
+	remote-endpoint = <&pm8150b_typec_mux_out>;
+};
+
 &usb_2_qmpphy {
 	status = "okay";
 	vdda-phy-supply = <&vreg_l3c_1p2>;
@@ -734,8 +738,13 @@
 };
 
 &usb_1_dwc3 {
-	dr_mode = "peripheral";
+//	dr_mode = "peripheral";
+	dr_mode = "otg";
 	usb-role-switch;
+};
+
+&usb_1_dwc3_role_switch_in {
+	remote-endpoint = <&pm8150b_role_switch_out>;
 };
 
 &usb_2_dwc3 {
@@ -753,19 +762,37 @@
 
 	connector {
 		compatible = "usb-c-connector";
-#if 1
-		power-role = "source";
+
+		power-role = "dual";
 		data-role = "dual";
+		try-power-role = "sink";
 		self-powered;
 
 		source-pdos = <PDO_FIXED(5000, 1500,
 					 PDO_FIXED_DUAL_ROLE |
 					 PDO_FIXED_USB_COMM |
 					 PDO_FIXED_DATA_SWAP)>;
-#else
-		pd-disable;
-		typec-power-opmode = "default";
-#endif
+
+		sink-pdos = <PDO_FIXED(5000, 400, PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)>;
+		op-sink-microwatt = <15000000>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				pm8150b_role_switch_out: endpoint {
+					remote-endpoint = <&usb_1_dwc3_role_switch_in>;
+				};
+			};
+			port@1 {
+				reg = <1>;
+				pm8150b_typec_mux_out: endpoint {
+					remote-endpoint = <&usb_1_qmpphy_typec_mux_in>;
+				};
+			};
+		};
 	};
 };
 

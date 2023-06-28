@@ -2601,7 +2601,6 @@ static int qmp_usb_probe(struct platform_device *pdev)
 	struct phy_provider *phy_provider;
 	void __iomem *serdes;
 	const struct qmp_phy_cfg *cfg = NULL;
-	int num, id;
 	int ret;
 
 	qmp = devm_kzalloc(dev, sizeof(*qmp), GFP_KERNEL);
@@ -2641,12 +2640,7 @@ static int qmp_usb_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, ret,
 				     "failed to get regulator supplies\n");
 
-	num = of_get_available_child_count(dev->of_node);
-	/* do we have a rogue child node ? */
-	if (num > 1)
-		return -EINVAL;
-
-	qmp->phys = devm_kcalloc(dev, num, sizeof(*qmp->phys), GFP_KERNEL);
+	qmp->phys = devm_kcalloc(dev, 1, sizeof(*qmp->phys), GFP_KERNEL);
 	if (!qmp->phys)
 		return -ENOMEM;
 
@@ -2660,30 +2654,25 @@ static int qmp_usb_probe(struct platform_device *pdev)
 	 */
 	pm_runtime_forbid(dev);
 
-	id = 0;
-	for_each_available_child_of_node(dev->of_node, child) {
-		/* Create per-lane phy */
-		ret = qmp_usb_create(dev, child, id, serdes, cfg);
-		if (ret) {
-			dev_err(dev, "failed to create lane%d phy, %d\n",
-				id, ret);
-			goto err_node_put;
-		}
-
-		/*
-		 * Register the pipe clock provided by phy.
-		 * See function description to see details of this pipe clock.
-		 */
-		ret = phy_pipe_clk_register(qmp, child);
-		if (ret) {
-			dev_err(qmp->dev,
-				"failed to register pipe clock source\n");
-			goto err_node_put;
-		}
-
-		id++;
+	child = of_get_next_available_child(dev->of_node, NULL);
+	/* Create per-lane phy */
+	ret = qmp_usb_create(dev, child, 0, serdes, cfg);
+	if (ret) {
+		dev_err(dev, "failed to create lane%d phy, %d\n",
+			0, ret);
+		goto err_node_put;
 	}
 
+	/*
+	 * Register the pipe clock provided by phy.
+	 * See function description to see details of this pipe clock.
+	 */
+	ret = phy_pipe_clk_register(qmp, child);
+	if (ret) {
+		dev_err(qmp->dev,
+			"failed to register pipe clock source\n");
+		goto err_node_put;
+	}
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
 
 	return PTR_ERR_OR_ZERO(phy_provider);

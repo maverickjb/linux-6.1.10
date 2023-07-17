@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# MSM Platform Specific Drivers
+#
+
+menuconfig MSM_PLATFORM_DEVICES
+	bool "MSM Platform Specific Device Drivers"
+        depends on ARCH_QCOM
+	default y
+	help
+	  Say Y here to get to see options for device drivers of various
+	  MSM platforms, including vendor-specific netbook/laptop/desktop
+	  extension and hardware monitor drivers. This option itself does
+	  not add any kernel code.
+
+	  If you say N, all options in this submenu will be skipped and disabled.
+
+
+if MSM_PLATFORM_DEVICES
+
+config QPNP_REVID
+        tristate "QPNP Revision ID Peripheral"
+        depends on SPMI
+        default y
+        help
+          Say 'y' here to include support for the Qualcomm Technologies, Inc.
+          QPNP REVID peripheral. REVID prints out the PMIC type and revision
+          numbers in the kernel log along with the PMIC option status. The PMIC
+          type is mapped to a QTI chip part number and logged as well.
+
+endif # MSM_PLATFORM_DEVICES

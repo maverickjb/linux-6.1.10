@@ -183,8 +183,16 @@
 		regulator-enable-ramp-delay = <233>;
 		gpio = <&tlmm 115 0>;
 		enable-active-high;
-//		regulator-always-on;
+		regulator-always-on;
 		regulator-boot-on;
+	};
+
+	bat: battery {
+		compatible = "simple-battery";
+		constant-charge-current-max-microamp = <900000>;
+		constant-charge-voltage-max-microvolt = <4480000>;
+		precharge-current-microamp = <160000>;
+		charge-term-current-microamp = <160000>;
 	};
 };
 
@@ -809,6 +817,11 @@
 		xiaomi-keyboard,vdd-gpio = <&tlmm 82 0x00>;
 		status = "ok";
 	};
+
+	nabu_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "fg-gen4-batterydata-nabu-sunwoda-8720mah.dtsi"
+	};
 };
 
 &wifi {
@@ -833,4 +846,55 @@
 	rtc_offset: rtc-offset@bc {
 		reg = <0xbc 0x4>;
 	};
+};
+
+&pm8150b_fg {
+	status = "okay";
+
+	qcom,battery-data = <&nabu_batterydata>;
+	qcom,rapid-soc-dec-en;
+	qcom,soc-scale-mode-en;
+	qcom,five-pin-battery;
+	qcom,soc-hi-res;
+	qcom,soc_decimal_rate = <
+		0  38
+		10 35
+		20 33
+		30 33
+		40 33
+		50 33
+		60 33
+		70 30
+		80 25
+		90 20
+		95 10 >;
+	qcom,ki-coeff-low-chg = <315>;
+	qcom,ki-coeff-med-chg = <183>;
+	qcom,fg-sys-term-current = <(-500)>;
+	qcom,fg-ffc-sys-term-current = <(-1530)>;
+	qcom,fg-cutoff-voltage = <3400>;
+	qcom,fg-cutoff-current = <200>;
+	qcom,fg-empty-voltage = <3100>;
+	qcom,soc-scale-vbatt-mv = <3600>;
+	qcom,fg-batt-temp-delta = <6>;
+	qcom,fg-force-load-profile;
+	qcom,shutdown-delay-enable;
+	/* ESR fast calibration */
+	qcom,fg-esr-timer-chg-fast = <0 7>;
+	qcom,fg-esr-timer-dischg-fast = <0 96>;
+	qcom,fg-esr-timer-chg-slow = <0 96>;
+	qcom,fg-esr-timer-dischg-slow = <0 96>;
+	qcom,fg-esr-cal-soc-thresh = <26 230>;
+	qcom,fg-esr-cal-temp-thresh = <10 40>;
+	qcom,ki-coeff-chg-med-hi-thresh-ma = <1000>;
+	qcom,ki-coeff-chg-low-med-thresh-ma = <500>;
+	qcom,ffc-ki-coeff-chg-med-hi-thresh-ma = <3900>;
+	qcom,ffc-ki-coeff-chg-low-med-thresh-ma = <3500>;
+
+	nvmem-names = "fg_sdam";
+	nvmem = <&pm8150_sdam_2>;
+};
+
+&pm8150b_charger {
+	status = "okay";
 };

@@ -3587,6 +3587,14 @@ CONFIG_POWER_SUPPLY_HWMON=y
 # CONFIG_CHARGER_UCS1002 is not set
 # CONFIG_CHARGER_BD99954 is not set
 # CONFIG_BATTERY_UG3105 is not set
+
+#
+# Qualcomm Technologies, Inc. Charger and Fuel Gauge support
+#
+CONFIG_QPNP_FG_GEN4=y
+CONFIG_QPNP_SMB5_NABU=y
+# end of Qualcomm Technologies, Inc. Charger and Fuel Gauge support
+
 CONFIG_HWMON=y
 # CONFIG_HWMON_DEBUG_CHIP is not set
 
@@ -6146,6 +6154,8 @@ CONFIG_XEN_AUTO_XLATE=y
 # CONFIG_GREYBUS is not set
 # CONFIG_COMEDI is not set
 # CONFIG_STAGING is not set
+CONFIG_MSM_PLATFORM_DEVICES=y
+CONFIG_QPNP_REVID=y
 # CONFIG_GOLDFISH is not set
 CONFIG_CHROME_PLATFORMS=y
 # CONFIG_CHROMEOS_ACPI is not set
@@ -6460,6 +6470,7 @@ CONFIG_QCOM_STATS=m
 # CONFIG_QCOM_WCNSS_CTRL is not set
 CONFIG_QCOM_APR=m
 # CONFIG_QCOM_ICC_BWMON is not set
+CONFIG_QCOM_PBS=y
 # end of Qualcomm SoC drivers
 
 CONFIG_SOC_TI=y

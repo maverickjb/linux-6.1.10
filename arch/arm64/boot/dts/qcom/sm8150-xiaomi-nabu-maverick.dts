@@ -435,6 +435,14 @@
 	/* PM8009 is not present on these boards, even if downstream sources suggest so. */
 };
 
+//Kryo 485 Prime additional cpu frequency
+&cpu7_opp_table {
+	cpu7_opp21: opp-2956800000 {
+		opp-hz = /bits/ 64 <2956800000>;
+		opp-peak-kBps = <8368000 51609600>;
+	};
+};
+
 &gmu {
 	status = "okay";
 };

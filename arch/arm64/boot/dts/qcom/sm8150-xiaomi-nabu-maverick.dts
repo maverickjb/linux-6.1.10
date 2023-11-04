@@ -183,7 +183,7 @@
 		regulator-enable-ramp-delay = <233>;
 		gpio = <&tlmm 115 0>;
 		enable-active-high;
-		regulator-always-on;
+//		regulator-always-on;
 		regulator-boot-on;
 	};
 
@@ -478,6 +478,27 @@
 &remoteproc_mpss {
 	status = "okay";
 	firmware-name = "qcom/sm8150/nabu/modem.mdt";
+};
+
+&spi18 {
+	status = "okay";
+
+	touchscreen@0 {
+		compatible = "novatek,NVT-ts-spi";
+		reg = <0>;
+
+		spi-max-frequency = <9600000>;
+		novatek,irq-gpio = <&tlmm 39 0x2001>;
+
+		novatek,pen-support;
+		novatek,wgp-stylus;
+
+		/* 523 */
+		novatek,swrst-n8-addr = <0x03F0FE>;
+		novatek,spi-rd-fast-addr = <0x03F310>;
+
+		firmware-name = "novatek/novatek_nt36523_fw.bin";
+	};
 };
 
 &tlmm {

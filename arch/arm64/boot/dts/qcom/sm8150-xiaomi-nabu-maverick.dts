@@ -188,6 +188,22 @@
 		regulator-boot-on;
 	};
 
+	gpio_keys: gpio-keys {
+		compatible = "gpio-keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&vol_up_n>;
+
+		key-vol-up {
+			label = "Volume Up";
+			gpios = <&pm8150_gpios 6 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEUP>;
+			debounce-interval = <15>;
+			linux,can-disable;
+			wakeup-source;
+		};
+	};
+
 	bat: battery {
 		compatible = "simple-battery";
 		constant-charge-current-max-microamp = <900000>;
@@ -198,12 +214,12 @@
 };
 
 &pm8150_gpios {
-	key_vol_up_default: key_vol_up_default {
+	vol_up_n: vol-up-n-state {
 		pins = "gpio6";
 		function = "normal";
+		power-source = <1>;
 		input-enable;
 		bias-pull-up;
-		power-source = <1>;
 	};
 };
 

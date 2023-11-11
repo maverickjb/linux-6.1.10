@@ -203,14 +203,6 @@
 			wakeup-source;
 		};
 	};
-
-	bat: battery {
-		compatible = "simple-battery";
-		constant-charge-current-max-microamp = <900000>;
-		constant-charge-voltage-max-microvolt = <4480000>;
-		precharge-current-microamp = <160000>;
-		charge-term-current-microamp = <160000>;
-	};
 };
 
 &pm8150_gpios {
@@ -458,6 +450,18 @@
 		opp-hz = /bits/ 64 <2956800000>;
 		opp-peak-kBps = <8368000 51609600>;
 	};
+};
+
+&gpi_dma0 {
+	status = "okay";
+};
+
+&gpi_dma1 {
+	status = "okay";
+};
+
+&gpi_dma2 {
+	status = "okay";
 };
 
 &gmu {

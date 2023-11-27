@@ -21,25 +21,13 @@ struct xiaomi_keyboard_platdata {
 };
 
 struct xiaomi_keyboard_data {
-//	struct notifier_block drm_notif;
 	struct xiaomi_keyboard_platdata *pdata;
-	bool dev_pm_suspend;
-	int irq;
 	struct platform_device *pdev;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_active;
 	struct pinctrl_state *pins_suspend;
-	struct workqueue_struct *event_wq;
-	struct work_struct resume_work;
-	struct work_struct suspend_work;
-	int keyboard_conn_status;
 	struct mutex rw_mutex;
 
-	struct mutex power_supply_lock;
-	struct work_struct power_supply_work;
-	struct notifier_block power_supply_notifier;
-	int is_usb_exist;
 	bool keyboard_is_enable;
-	bool is_in_suspend;
 };
 #endif

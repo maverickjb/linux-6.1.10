@@ -514,17 +514,17 @@
 
 &remoteproc_adsp {
 	status = "okay";
-	firmware-name = "qcom/sm8150/xiaomi/nabu/adsp.mbn";
+	firmware-name = "qcom/sm8150/xiaomi/nabu/adsp.mdt";
 };
 
 &remoteproc_cdsp {
 	status = "okay";
-	firmware-name = "qcom/sm8150/nabu/cdsp.mdt";
+	firmware-name = "qcom/sm8150/xiaomi/nabu/cdsp.mdt";
 };
 
 &remoteproc_mpss {
 	status = "okay";
-	firmware-name = "qcom/sm8150/nabu/modem.mdt";
+	firmware-name = "qcom/sm8150/xiaomi/nabu/modem.mdt";
 };
 
 &sound {

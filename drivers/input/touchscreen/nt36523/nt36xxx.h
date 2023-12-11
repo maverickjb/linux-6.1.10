@@ -120,7 +120,11 @@ struct nvt_ts_data {
 	uint16_t addr;
 	int8_t phys[32];
 #if defined(CONFIG_FB)
+#ifdef CONFIG_DRM
+	struct notifier_block drm_notif;
+#else
 	struct notifier_block fb_notif;
+#endif
 #endif
 	uint32_t config_array_size;
 	struct nvt_config_info *config_array;

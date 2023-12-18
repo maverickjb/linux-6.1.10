@@ -162,29 +162,25 @@
 		vin-supply = <&vph_pwr>;
 	};
 
-	lcd_avdd_5p5: lcd-avdd-regulator {
+	bl_vddpos_5p5: bl-vddpos-regulator {
 		compatible = "regulator-fixed";
-		regulator-name = "lcd_avdd_5p5";
-
+		regulator-name = "bl_vddpos_5p5";
 		regulator-min-microvolt = <5500000>;
 		regulator-max-microvolt = <5500000>;
 		regulator-enable-ramp-delay = <233>;
-		gpio = <&tlmm 114 0>;
+		gpio = <&tlmm 114 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-//		regulator-always-on;
 		regulator-boot-on;
 	};
 
-	lcd_avee_5p5: lcd-avee-regulator {
+	bl_vddneg_5p5: bl-vddneg-regulator {
 		compatible = "regulator-fixed";
-		regulator-name = "lcd_avee_5p5";
-
+		regulator-name = "bl_vddneg_5p5";
 		regulator-min-microvolt = <5500000>;
 		regulator-max-microvolt = <5500000>;
 		regulator-enable-ramp-delay = <233>;
-		gpio = <&tlmm 115 0>;
+		gpio = <&tlmm 115 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-//		regulator-always-on;
 		regulator-boot-on;
 	};
 
@@ -571,8 +567,13 @@
 	backlight: backlight@11 {
 		compatible = "kinetic,ktz8866";
 		reg = <0x11>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&bl_en_state>;
+		vddpos-supply = <&bl_vddpos_5p5>;
+		vddneg-supply = <&bl_vddneg_5p5>;
+		enable-gpios = <&tlmm 27 GPIO_ACTIVE_HIGH>;
+		current-num-sinks = <5>;
+		kinetic,current-ramp-delay-ms = <128>;
+		kinetic,led-enable-ramp-delay-ms = <1>;
+		kinetic,enable-lcd-bias;
 	};
 };
 
@@ -731,17 +732,6 @@
 		};
 	};
 
-	bl_en_state: bl-default-state {
-		bl-en {
-			pins = "gpio27";
-			function = "gpio";
-
-			drive-strength = <16>;
-			output-high;
-			bias-disable;
-		};
-	};
-
 	xiaomi_keyboard_mcu {
 		xiaomi_keyboard_suspend: xiaomi_keyboard_suspend {
 			mux {
@@ -804,15 +794,13 @@
 	qcom,sync-dual-dsi;
 
 	panel@0 {
-		compatible = "novatek,nt36523";
+		compatible = "xiaomi,nabu-csot-nt36523", "novatek,nt36523";
 		reg = <0>;
 
 		backlight = <&backlight>;
 		reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
 
 		vddio-supply = <&vreg_l14a_1p88>;
-		avdd-supply = <&lcd_avdd_5p5>;
-		avee-supply = <&lcd_avee_5p5>;
 
 		#address-cells = <1>;
 		#size-cells = <0>;

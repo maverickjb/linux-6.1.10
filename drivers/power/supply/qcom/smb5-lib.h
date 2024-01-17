@@ -20,6 +20,13 @@ enum print_reason {
 	PR_OEM		= BIT(6),
 };
 
+#define USB_SUSPEND_VOTER		"USB_SUSPEND_VOTER"
+
+enum {
+	RERUN_AICL = 0,
+	RESTART_AICL,
+};
+
 enum smb_irq_index {
 	/* CHGR */
 	CHGR_ERROR_IRQ = 0,
@@ -141,6 +148,9 @@ struct buck_boost_freq {
 };
 
 struct smb_params {
+	struct smb_chg_param	usb_icl;
+	struct smb_chg_param	icl_max_stat;
+	struct smb_chg_param	icl_stat;
 	struct smb_chg_param	otg_cl;
 	struct smb_chg_param	dc_icl;
 };
@@ -152,6 +162,9 @@ struct smb_charger {
 	struct smb_irq_info	*irq_info;
 	struct smb_params	param;
 	int			*debug_mask;
+
+	/* votables */
+	struct votable		*icl_irq_disable_votable;
 
 	/* power supplies */
 //	struct power_supply		*batt_psy;
@@ -169,6 +182,7 @@ int smblib_set_charge_param(struct smb_charger *chg,
 irqreturn_t default_irq_handler(int irq, void *data);
 irqreturn_t chg_state_change_irq_handler(int irq, void *data);
 irqreturn_t usb_plugin_irq_handler(int irq, void *data);
+irqreturn_t icl_change_irq_handler(int irq, void *data);
 irqreturn_t dc_plugin_irq_handler(int irq, void *data);
 int smblib_get_prop_batt_present(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -187,12 +201,16 @@ int smblib_get_prop_usb_online(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_usb_present(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblib_get_prop_input_current_settled(struct smb_charger *chg,
+				union power_supply_propval *val);
 int smblib_set_prop_rechg_soc_thresh(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_disable_hw_jeita(struct smb_charger *chg, bool disable);
 int smblib_get_prop_from_bms(struct smb_charger *chg,
 				enum power_supply_property psp,
 				union power_supply_propval *val);
+int smblib_set_icl_current(struct smb_charger *chg, int icl_ua);
+int smblib_get_icl_current(struct smb_charger *chg, int *icl_ua);
 int smblib_icl_override(struct smb_charger *chg, enum icl_override_mode mode);
 
 int smblib_init(struct smb_charger *chg);

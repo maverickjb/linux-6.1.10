@@ -4,8 +4,10 @@
 #include <linux/power_supply.h>
 #include <linux/regulator/driver.h>
 #include <linux/irq.h>
+
 #include "smb5-lib.h"
 #include "smb5-reg.h"
+#include "pmic-voter.h"
 
 #define smblib_err(chg, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chg->name,	\
@@ -45,6 +47,156 @@ int smblib_masked_write(struct smb_charger *chg, u16 addr, u8 mask, u8 val)
 			mask, val);
 	}
 	return regmap_update_bits(chg->regmap, addr, mask, val);
+}
+
+#define INPUT_NOT_PRESENT	0
+#define INPUT_PRESENT_USB	BIT(1)
+#define INPUT_PRESENT_DC	BIT(2)
+static int smblib_is_input_present(struct smb_charger *chg,
+				   int *present)
+{
+	int rc;
+	union power_supply_propval pval = {0, };
+
+	*present = INPUT_NOT_PRESENT;
+
+	rc = smblib_get_prop_usb_present(chg, &pval);
+	if (rc < 0) {
+		pr_err("Couldn't get usb presence status rc=%d\n", rc);
+		return rc;
+	}
+	*present |= pval.intval ? INPUT_PRESENT_USB : INPUT_NOT_PRESENT;
+
+	rc = smblib_get_prop_dc_present(chg, &pval);
+	if (rc < 0) {
+		pr_err("Couldn't get dc presence status rc=%d\n", rc);
+		return rc;
+	}
+	*present |= pval.intval ? INPUT_PRESENT_DC : INPUT_NOT_PRESENT;
+
+	return 0;
+}
+
+int smblib_get_charge_param(struct smb_charger *chg,
+			    struct smb_chg_param *param, int *val_u)
+{
+	int rc = 0;
+	u8 val_raw;
+
+	rc = smblib_read(chg, param->reg, &val_raw);
+	if (rc < 0) {
+		smblib_err(chg, "%s: Couldn't read from 0x%04x rc=%d\n",
+			param->name, param->reg, rc);
+		return rc;
+	}
+
+	if (param->get_proc)
+		*val_u = param->get_proc(param, val_raw);
+	else
+		*val_u = val_raw * param->step_u + param->min_u;
+	smblib_dbg(chg, PR_REGISTER, "%s = %d (0x%02x)\n",
+		   param->name, *val_u, val_raw);
+
+	return rc;
+}
+
+int smblib_set_charge_param(struct smb_charger *chg,
+			    struct smb_chg_param *param, int val_u)
+{
+	int rc = 0;
+	u8 val_raw;
+
+	if (param->set_proc) {
+		rc = param->set_proc(param, val_u, &val_raw);
+		if (rc < 0)
+			return -EINVAL;
+	} else {
+		if (val_u > param->max_u || val_u < param->min_u)
+			smblib_dbg(chg, PR_MISC,
+				"%s: %d is out of range [%d, %d]\n",
+				param->name, val_u, param->min_u, param->max_u);
+
+		if (val_u > param->max_u)
+			val_u = param->max_u;
+		if (val_u < param->min_u)
+			val_u = param->min_u;
+
+		val_raw = (val_u - param->min_u) / param->step_u;
+	}
+
+	rc = smblib_write(chg, param->reg, val_raw);
+	if (rc < 0) {
+		smblib_err(chg, "%s: Couldn't write 0x%02x to 0x%04x rc=%d\n",
+			param->name, val_raw, param->reg, rc);
+		return rc;
+	}
+
+	smblib_dbg(chg, PR_REGISTER, "%s = %d (0x%02x)\n",
+		   param->name, val_u, val_raw);
+
+	return rc;
+}
+
+int smblib_get_prop_from_bms(struct smb_charger *chg,
+				enum power_supply_property psp,
+				union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->bms_psy)
+		return -EINVAL;
+
+	rc = power_supply_get_property(chg->bms_psy, psp, val);
+
+	return rc;
+}
+
+static int smblib_icl_irq_disable_vote_callback(struct votable *votable,
+				void *data, int disable, const char *client)
+{
+	struct smb_charger *chg = data;
+
+	if (!chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq)
+		return 0;
+
+	if (chg->irq_info[USBIN_ICL_CHANGE_IRQ].enabled) {
+		if (disable)
+			disable_irq_nosync(
+				chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
+	} else {
+		if (!disable)
+			enable_irq(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
+	}
+
+	chg->irq_info[USBIN_ICL_CHANGE_IRQ].enabled = !disable;
+
+	return 0;
+}
+
+int smblib_run_aicl(struct smb_charger *chg, int type)
+{
+	int rc;
+	u8 stat;
+
+	rc = smblib_read(chg, POWER_PATH_STATUS_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read POWER_PATH_STATUS rc=%d\n",
+								rc);
+		return rc;
+	}
+
+	/* USB is suspended so skip re-running AICL */
+	if (stat & USBIN_SUSPEND_STS_BIT)
+		return rc;
+
+	smblib_dbg(chg, PR_MISC, "re-running AICL\n");
+
+	stat = (type == RERUN_AICL) ? RERUN_AICL_BIT : RESTART_AICL_BIT;
+	rc = smblib_masked_write(chg, AICL_CMD_REG, stat, stat);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't write to AICL_CMD_REG rc=%d\n",
+				rc);
+	return 0;
 }
 
 int smblib_icl_override(struct smb_charger *chg, enum icl_override_mode  mode)
@@ -95,81 +247,134 @@ int smblib_icl_override(struct smb_charger *chg, enum icl_override_mode  mode)
 	return rc;
 }
 
-#define INPUT_NOT_PRESENT	0
-#define INPUT_PRESENT_USB	BIT(1)
-#define INPUT_PRESENT_DC	BIT(2)
-static int smblib_is_input_present(struct smb_charger *chg,
-				   int *present)
-{
-	int rc;
-	union power_supply_propval pval = {0, };
-
-	*present = INPUT_NOT_PRESENT;
-
-	rc = smblib_get_prop_usb_present(chg, &pval);
-	if (rc < 0) {
-		pr_err("Couldn't get usb presence status rc=%d\n", rc);
-		return rc;
-	}
-	*present |= pval.intval ? INPUT_PRESENT_USB : INPUT_NOT_PRESENT;
-
-	rc = smblib_get_prop_dc_present(chg, &pval);
-	if (rc < 0) {
-		pr_err("Couldn't get dc presence status rc=%d\n", rc);
-		return rc;
-	}
-	*present |= pval.intval ? INPUT_PRESENT_DC : INPUT_NOT_PRESENT;
-
-	return 0;
-}
-
-int smblib_set_charge_param(struct smb_charger *chg,
-			    struct smb_chg_param *param, int val_u)
+int smblib_set_usb_suspend(struct smb_charger *chg, bool suspend)
 {
 	int rc = 0;
-	u8 val_raw;
+	if (suspend)
+		vote(chg->icl_irq_disable_votable, USB_SUSPEND_VOTER,
+				true, 0);
 
-	if (param->set_proc) {
-		rc = param->set_proc(param, val_u, &val_raw);
-		if (rc < 0)
-			return -EINVAL;
-	} else {
-		if (val_u > param->max_u || val_u < param->min_u)
-			smblib_dbg(chg, PR_MISC,
-				"%s: %d is out of range [%d, %d]\n",
-				param->name, val_u, param->min_u, param->max_u);
+	rc = smblib_masked_write(chg, USBIN_CMD_IL_REG, USBIN_SUSPEND_BIT,
+				 suspend ? USBIN_SUSPEND_BIT : 0);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't write %s to USBIN_SUSPEND_BIT rc=%d\n",
+			suspend ? "suspend" : "resume", rc);
 
-		if (val_u > param->max_u)
-			val_u = param->max_u;
-		if (val_u < param->min_u)
-			val_u = param->min_u;
-
-		val_raw = (val_u - param->min_u) / param->step_u;
-	}
-
-	rc = smblib_write(chg, param->reg, val_raw);
-	if (rc < 0) {
-		smblib_err(chg, "%s: Couldn't write 0x%02x to 0x%04x rc=%d\n",
-			param->name, val_raw, param->reg, rc);
-		return rc;
-	}
-
-	smblib_dbg(chg, PR_REGISTER, "%s = %d (0x%02x)\n",
-		   param->name, val_u, val_raw);
+	if (!suspend)
+		vote(chg->icl_irq_disable_votable, USB_SUSPEND_VOTER,
+				false, 0);
 
 	return rc;
 }
 
-int smblib_get_prop_from_bms(struct smb_charger *chg,
-				enum power_supply_property psp,
-				union power_supply_propval *val)
+#define USBIN_25MA	25000
+#define USBIN_100MA	100000
+#define USBIN_150MA	150000
+#define USBIN_500MA	500000
+#define USBIN_900MA	900000
+#define USBIN_1000MA	1000000
+static int set_sdp_current(struct smb_charger *chg, int icl_ua)
+{
+	int rc;
+	u8 icl_options;
+
+	/* power source is SDP */
+	switch (icl_ua) {
+	case USBIN_100MA:
+		/* USB 2.0 100mA */
+		icl_options = 0;
+		break;
+	case USBIN_150MA:
+		/* USB 3.0 150mA */
+		icl_options = CFG_USB3P0_SEL_BIT;
+		break;
+	case USBIN_500MA:
+		/* USB 2.0 500mA */
+		icl_options = USB51_MODE_BIT;
+		break;
+	case USBIN_900MA:
+		/* USB 3.0 900mA */
+		icl_options = CFG_USB3P0_SEL_BIT | USB51_MODE_BIT;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	rc = smblib_masked_write(chg, USBIN_ICL_OPTIONS_REG,
+			CFG_USB3P0_SEL_BIT | USB51_MODE_BIT, icl_options);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set ICL options rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = smblib_icl_override(chg, SW_OVERRIDE_USB51_MODE);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set ICL override rc=%d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
+int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
+{
+	int rc = 0;
+	enum icl_override_mode icl_override = HW_AUTO_MODE;
+	/* suspend if 25mA or less is requested */
+	bool suspend = (icl_ua <= USBIN_25MA);
+
+	pr_info("icl_ua value is: %d\n", icl_ua);
+
+	if (suspend)
+		return smblib_set_usb_suspend(chg, true);
+
+	if (icl_ua == INT_MAX)
+		goto set_mode;
+
+	/* configure current */
+	if (icl_ua <= USBIN_500MA) {
+		rc = set_sdp_current(chg, icl_ua);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't set SDP ICL rc=%d\n", rc);
+			goto out;
+		}
+	} else {
+		rc = smblib_set_charge_param(chg, &chg->param.usb_icl, icl_ua);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
+			goto out;
+		}
+		icl_override = SW_OVERRIDE_HC_MODE;
+	}
+
+set_mode:
+	rc = smblib_icl_override(chg, icl_override);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set ICL override rc=%d\n", rc);
+		goto out;
+	}
+
+	/* unsuspend after configuring current and override */
+	rc = smblib_set_usb_suspend(chg, false);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't resume input rc=%d\n", rc);
+		goto out;
+	}
+
+	/* Re-run AICL */
+	if (icl_override != SW_OVERRIDE_HC_MODE)
+		rc = smblib_run_aicl(chg, RERUN_AICL);
+out:
+	return rc;
+}
+
+int smblib_get_icl_current(struct smb_charger *chg, int *icl_ua)
 {
 	int rc;
 
-	if (!chg->bms_psy)
-		return -EINVAL;
-
-	rc = power_supply_get_property(chg->bms_psy, psp, val);
+	rc = smblib_get_charge_param(chg, &chg->param.icl_max_stat, icl_ua);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't get HC ICL rc=%d\n", rc);
 
 	return rc;
 }
@@ -488,6 +693,12 @@ int smblib_get_prop_usb_online(struct smb_charger *chg,
 	return rc;
 }
 
+int smblib_get_prop_input_current_settled(struct smb_charger *chg,
+					  union power_supply_propval *val)
+{
+	return smblib_get_charge_param(chg, &chg->param.icl_stat, &val->intval);
+}
+
 /**********************
  * INTERRUPT HANDLERS *
  **********************/
@@ -505,10 +716,47 @@ irqreturn_t chg_state_change_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
+	u8 stat;
+	int rc;
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
 
+	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_1_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
+				rc);
+		return IRQ_HANDLED;
+	}
+
 	power_supply_changed(chg->dc_psy);
+	return IRQ_HANDLED;
+}
+
+irqreturn_t icl_change_irq_handler(int irq, void *data)
+{
+	u8 stat;
+	int rc, settled_ua;
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+
+	rc = smblib_read(chg, AICL_STATUS_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read AICL_STATUS rc=%d\n",
+				rc);
+		return IRQ_HANDLED;
+	}
+
+	rc = smblib_get_charge_param(chg, &chg->param.icl_stat,
+				&settled_ua);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't get ICL status rc=%d\n", rc);
+		return IRQ_HANDLED;
+	}
+
+//	power_supply_changed(chg->dc_psy);
+
+	smblib_dbg(chg, PR_INTERRUPT, "icl_settled=%d\n", settled_ua);
+
 	return IRQ_HANDLED;
 }
 
@@ -540,8 +788,40 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int smblib_create_votables(struct smb_charger *chg)
+{
+	int rc = 0;
+
+	chg->icl_irq_disable_votable = create_votable("USB_ICL_IRQ_DISABLE",
+					VOTE_SET_ANY,
+					smblib_icl_irq_disable_vote_callback,
+					chg);
+	if (IS_ERR(chg->icl_irq_disable_votable)) {
+		rc = PTR_ERR(chg->icl_irq_disable_votable);
+		chg->icl_irq_disable_votable = NULL;
+		return rc;
+	}
+
+	return rc;
+}
+
+static void smblib_destroy_votables(struct smb_charger *chg)
+{
+	if (chg->icl_irq_disable_votable)
+		destroy_votable(chg->icl_irq_disable_votable);
+}
+
 int smblib_init(struct smb_charger *chg)
 {
+	int rc = 0;
+
+	rc = smblib_create_votables(chg);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't create votables rc=%d\n",
+			rc);
+		return rc;
+	}
+
 	chg->bms_psy = power_supply_get_by_name("bms");
 
 	return 0;
@@ -549,5 +829,7 @@ int smblib_init(struct smb_charger *chg)
 
 int smblib_deinit(struct smb_charger *chg)
 {
+	smblib_destroy_votables(chg);
+
 	return 0;
 }

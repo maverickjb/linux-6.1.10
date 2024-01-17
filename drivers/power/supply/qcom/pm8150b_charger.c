@@ -10,11 +10,32 @@
 #include "smb5-lib.h"
 
 static struct smb_params smb5_pm8150b_params = {
+	.usb_icl		= {
+		.name   = "usb input current limit",
+		.reg    = USBIN_CURRENT_LIMIT_CFG_REG,
+		.min_u  = 0,
+		.max_u  = 5000000,
+		.step_u = 50000,
+	},
+	.icl_max_stat		= {
+		.name	= "dcdc icl max status",
+		.reg	= ICL_MAX_STATUS_REG,
+		.min_u	= 0,
+		.max_u	= 5000000,
+		.step_u = 50000,
+	},
+	.icl_stat		= {
+		.name	= "aicl icl status",
+		.reg	= AICL_ICL_STATUS_REG,
+		.min_u	= 0,
+		.max_u	= 5000000,
+		.step_u = 50000,
+	},
 	.otg_cl			= {
 		.name	= "usb otg current limit",
 		.reg	= DCDC_OTG_CURRENT_LIMIT_CFG_REG,
 		.min_u	= 500000,
-		.max_u	= 1000000,
+		.max_u	= 2000000,
 		.step_u	= 500000,
 	},
 	.dc_icl 	= {
@@ -56,20 +77,7 @@ static int smb5_parse_dt(struct smb5 *chip)
 	return 0;
 }
 
-/*************************
- * DC PSY REGISTRATION   *
- *************************/
-
-static enum power_supply_property smb5_dc_props[] = {
-	POWER_SUPPLY_PROP_STATUS,
-	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_HEALTH,
-	/* battery */
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_CHARGE_TYPE,
-};
-
-static int smb5_dc_get_prop(struct power_supply *psy,
+static int pm8150b_power_supply_get_property(struct power_supply *psy,
 		enum power_supply_property psp,
 		union power_supply_propval *val)
 {
@@ -94,9 +102,16 @@ static int smb5_dc_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		rc = smblib_get_prop_batt_charge_type(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		rc = smblib_get_prop_input_current_settled(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		rc = smblib_get_icl_current(chg, &val->intval);
+		break;
 	default:
 		return -EINVAL;
 	}
+
 	if (rc < 0) {
 		pr_debug("Couldn't get prop %d rc = %d\n", psp, rc);
 		return -ENODATA;
@@ -105,12 +120,68 @@ static int smb5_dc_get_prop(struct power_supply *psy,
 	return 0;
 }
 
+static int pm8150b_power_supply_set_property(struct power_supply *psy,
+					     enum power_supply_property psp,
+					     const union power_supply_propval *val)
+{
+	struct smb5 *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
+//	int temp_val;
+	int rc = 0;
+
+	switch (psp) {
+#if 0
+	case POWER_SUPPLY_PROP_STATUS:
+		if (val->intval == false) {
+			rc = smblib_set_icl_current(chg, 25000);
+		} else {
+			rc = smblib_get_icl_current(chg, &temp_val);
+			if (rc < 0)
+				break;
+			rc = smblib_set_icl_current(chg, temp_val);
+		}
+		break;
+#endif
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		rc = smblib_set_icl_current(chg, val->intval);
+		break;
+	default:
+		rc = -EINVAL;
+	}
+
+	return rc;
+}
+
+static int pm8150b_power_supply_property_is_writeable(struct power_supply *psy,
+						      enum power_supply_property psp)
+{
+	switch (psp) {
+//	case POWER_SUPPLY_PROP_STATUS:
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static enum power_supply_property pm8150b_power_supply_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_CHARGE_TYPE,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
+};
+
 static const struct power_supply_desc dc_psy_desc = {
 	.name = "pm8150b-charger",
 	.type = POWER_SUPPLY_TYPE_MAINS,
-	.properties = smb5_dc_props,
-	.num_properties = ARRAY_SIZE(smb5_dc_props),
-	.get_property = smb5_dc_get_prop,
+	.properties = pm8150b_power_supply_props,
+	.num_properties = ARRAY_SIZE(pm8150b_power_supply_props),
+	.get_property = pm8150b_power_supply_get_property,
+	.set_property = pm8150b_power_supply_set_property,
+	.property_is_writeable = pm8150b_power_supply_property_is_writeable,
 };
 
 static int smb5_init_dc_psy(struct smb5 *chip)
@@ -679,7 +750,7 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[USBIN_ICL_CHANGE_IRQ] = {
 		.name		= "usbin-icl-change",
-		.handler	= default_irq_handler,
+		.handler	= icl_change_irq_handler,
 		.wake           = true,
 	},
 	/* DC INPUT IRQs */

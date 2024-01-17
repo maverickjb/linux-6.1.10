@@ -438,18 +438,6 @@ bool batt_psy_initialized(struct fg_dev *fg)
 	return true;
 }
 
-bool pc_port_psy_initialized(struct fg_dev *fg)
-{
-	if (fg->pc_port_psy)
-		return true;
-
-	fg->pc_port_psy = power_supply_get_by_name("pc_port");
-	if (!fg->pc_port_psy)
-		return false;
-
-	return true;
-}
-
 bool is_parallel_charger_available(struct fg_dev *fg)
 {
 	if (!fg->parallel_psy)

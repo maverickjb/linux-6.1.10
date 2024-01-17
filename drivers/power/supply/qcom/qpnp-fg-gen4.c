@@ -277,7 +277,6 @@ struct fg_gen4_chip {
 	struct device_node	*pbs_dev;
 	struct nvmem_device	*fg_nvmem;
 	struct votable		*delta_esr_irq_en_votable;
-	struct votable		*pl_disable_votable;
 	struct votable		*cp_disable_votable;
 	struct votable		*parallel_current_en_votable;
 	struct votable		*mem_attn_irq_en_votable;
@@ -714,9 +713,9 @@ static int fg_gen4_get_battery_temp(struct fg_dev *fg, int *val)
 	return 0;
 }
 
-static int fg_gen4_tz_get_temp(struct thermal_zone_device *data, int *temperature)
+static int fg_gen4_tz_get_temp(struct thermal_zone_device *tz, int *temperature)
 {
-	struct fg_dev *fg = (struct fg_dev *)data;
+	struct fg_dev *fg = tz->devdata;
 	int rc, temp;
 
 	if (!temperature)
@@ -1483,7 +1482,7 @@ static int fg_gen4_get_batt_profile(struct fg_dev *fg)
 	}
 
 	profile_node = of_batterydata_get_best_profile(batt_node,
-				fg->batt_id_ohms / 1000, NULL);
+				fg->batt_id_ohms / 1000, "K82_sunwoda_8720mah");
 
 
 	if (IS_ERR(profile_node))
@@ -2784,8 +2783,6 @@ static irqreturn_t fg_batt_missing_irq_handler(int irq, void *data)
 
 		cancel_delayed_work_sync(&chip->pl_enable_work);
 		vote(fg->awake_votable, ESR_FCC_VOTER, false, 0);
-		if (chip->pl_disable_votable)
-			vote(chip->pl_disable_votable, ESR_FCC_VOTER, true, 0);
 		if (chip->cp_disable_votable)
 			vote(chip->cp_disable_votable, ESR_FCC_VOTER, true, 0);
 		return IRQ_HANDLED;
@@ -3328,8 +3325,6 @@ static void pl_enable_work(struct work_struct *work)
 				pl_enable_work.work);
 	struct fg_dev *fg = &chip->fg;
 
-	if (chip->pl_disable_votable)
-		vote(chip->pl_disable_votable, ESR_FCC_VOTER, false, 0);
 	if (chip->cp_disable_votable)
 		vote(chip->cp_disable_votable, ESR_FCC_VOTER, false, 0);
 	vote(fg->awake_votable, ESR_FCC_VOTER, false, 0);
@@ -3354,9 +3349,6 @@ static void status_change_work(struct work_struct *work)
 		pm_relax(fg->dev);
 		return;
 	}
-
-	if (!chip->pl_disable_votable)
-		chip->pl_disable_votable = find_votable("PL_DISABLE");
 
 	if (!chip->cp_disable_votable)
 		chip->cp_disable_votable = find_votable("CP_DISABLE");
@@ -3904,20 +3896,6 @@ static int fg_parallel_current_en_cb(struct votable *votable, void *data,
 	rc = fg_wait_for_mem_attn(chip);
 	if (rc < 0)
 		return rc;
-
-	/* qcom new patch to fix pm8150b ADC EOC bit not set issue */
-	/* val = enable ? SMB_MEASURE_EN_BIT : 0;
-	mask = SMB_MEASURE_EN_BIT;
-	rc = fg_masked_write(fg, BATT_INFO_FG_CNV_CHAR_CFG(fg), mask, val);
-	if (rc < 0)
-		pr_err("Error in writing to 0x%04x, rc=%d\n",
-			BATT_INFO_FG_CNV_CHAR_CFG(fg), rc);
-
-	vote(chip->mem_attn_irq_en_votable, MEM_ATTN_IRQ_VOTER, false, 0);
-	fg_dbg(fg, FG_STATUS, "Parallel current summing: %d\n", enable); */
-
-	/* qcom patch to fix pm8150b ADC EOC bit not set issue */
-	/*vote(chip->mem_attn_irq_en_votable, MEM_ATTN_IRQ_VOTER, false, 0);*/
 
 	return rc;
 }
@@ -5175,7 +5153,7 @@ static void soc_work_fn(struct work_struct *work)
 	rc = get_cycle_count(chip->counter, &cycle_count);
 	if (rc < 0)
 		pr_err("failed to get cycle count, rc=%d\n", rc);
-
+#if 0
 	pr_info("adjust_soc: s %d r %d i %d v %d t %d cc %d m 0x%02x\n",
 			soc,
 			esr_uohms,
@@ -5184,7 +5162,7 @@ static void soc_work_fn(struct work_struct *work)
 			temp,
 			cycle_count,
 			msoc);
-
+#endif
 	if (temp < 450 && fg->last_batt_temp >= 450) {
 		/* follow the way that fg_notifier_cb use wake lock */
 		pm_stay_awake(fg->dev);
@@ -5365,10 +5343,11 @@ static void fg_battery_soc_smooth_tracking(struct fg_gen4_chip *chip)
 		if (batt_psy_initialized(fg))
 			power_supply_changed(fg->batt_psy);
 	}
-
+#if 0
 	pr_info("soc:%d, last_soc:%d, raw_soc:%d, soc_changed:%d.\n",
 				fg->param.batt_soc, last_batt_soc,
 				fg->param.batt_raw_soc, soc_changed);
+#endif
 }
 
 static int fg_dynamic_set_cutoff_voltage(struct fg_dev *fg,
@@ -5419,11 +5398,11 @@ static void soc_monitor_work(struct work_struct *work)
 
 	if (fg->soc_reporting_ready)
 		fg_battery_soc_smooth_tracking(chip);
-
+#if 0
 	pr_info("soc:%d, raw_soc:%d, c:%d, s:%d\n",
 			fg->param.batt_soc, fg->param.batt_raw_soc,
 			fg->param.batt_ma, fg->charge_status);
-
+#endif
 	if (chip->cold_thermal_support) {
 		if (!fg->batt_temp_low
 				&& fg->param.batt_temp <= LOW_DISCHARGE_TEMP_TRH) {

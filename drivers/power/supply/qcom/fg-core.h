@@ -482,7 +482,6 @@ struct fg_dev {
 	struct fg_irq_info	*irqs;
 	struct votable		*awake_votable;
 	struct votable		*delta_bsoc_irq_en_votable;
-	struct votable		*batt_miss_irq_en_votable;
 	struct fg_sram_param	*sp;
 	struct fg_memif		sram;
 	struct fg_alg_flag	*alg_flags;
@@ -658,7 +657,6 @@ extern s64 fg_float_decode(u16 val);
 extern bool usb_psy_initialized(struct fg_dev *fg);
 extern bool dc_psy_initialized(struct fg_dev *fg);
 extern bool batt_psy_initialized(struct fg_dev *fg);
-extern bool pc_port_psy_initialized(struct fg_dev *fg);
 extern void fg_notify_charger(struct fg_dev *fg);
 extern bool is_input_present(struct fg_dev *fg);
 extern bool is_parallel_charger_available(struct fg_dev *fg);

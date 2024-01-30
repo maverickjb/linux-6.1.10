@@ -58,6 +58,20 @@
 #define CMD_EXIT_MODE		5
 #define CMD_ATTENTION		6
 
+/* UVDM for Mi adaptor */
+#define USBPD_UVDM_CHARGER_VERSION	1
+#define USBPD_UVDM_CHARGER_VOLTAGE	2
+#define USBPD_UVDM_CHARGER_TEMP		3
+#define USBPD_UVDM_SESSION_SEED		4
+#define USBPD_UVDM_AUTHENTICATION	5
+#define USBPD_UVDM_VERIFIED			6
+
+#define UVDM_HDR(svid, cmd0, cmd1) \
+       (((svid) << 16) | (0 << 15) | ((cmd0) << 8) \
+       | (cmd1))
+#define UVDM_HDR_CMD(hdr)	((hdr) & 0xff)
+#define USBPD_UVDM_REQUEST		0x1
+
 #define VDO_CMD_VENDOR(x)    (((0x10 + (x)) & 0x1f))
 
 /* ChromeOS specific commands */

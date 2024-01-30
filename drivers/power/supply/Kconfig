@@ -723,6 +723,13 @@ config CHARGER_BQ256XX
 	  charge management and system power path management devices for single
 	  cell Li-ion and Li-polymer batteries.
 
+config CHARGER_LN8000
+        tristate "LionSemi LN8000 Battery Charger"
+        depends on I2C
+        select REGMAP_I2C
+        help
+          Say Y to enable support for the LN8000 charger on NABU
+
 config CHARGER_RK817
 	tristate "Rockchip RK817 PMIC Battery Charger"
 	depends on MFD_RK808

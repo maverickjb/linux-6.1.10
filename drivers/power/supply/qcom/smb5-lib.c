@@ -755,7 +755,7 @@ irqreturn_t icl_change_irq_handler(int irq, void *data)
 
 //	power_supply_changed(chg->dc_psy);
 
-	smblib_dbg(chg, PR_INTERRUPT, "icl_settled=%d\n", settled_ua);
+//	smblib_dbg(chg, PR_INTERRUPT, "icl_settled=%d\n", settled_ua);
 
 	return IRQ_HANDLED;
 }

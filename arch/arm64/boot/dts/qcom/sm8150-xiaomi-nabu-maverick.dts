@@ -199,6 +199,20 @@
 			wakeup-source;
 		};
 	};
+
+	gpio-hall-sensor {
+		compatible = "gpio-keys";
+		label = "Hall sensors";
+
+		event-hall-sensor0 {
+			label = "Cover Hall Sensor 0";
+			gpios = <&tlmm 9 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_SW>;
+			linux,code = <SW_LID>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+	};
 };
 
 &pm8150_gpios {

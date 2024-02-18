@@ -21,18 +21,24 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
+#include <linux/usb/pd.h>
 
 #include "usbpd_manager.h"
+
+#define MIN_ADAPTER_VOLT_REQUIRED		10000		
+#define MIN_ADAPTER_CURR_REQUIRED		2000
 
 #define BATT_MAX_CHG_VOLT		4450
 #define BATT_FAST_CHG_CURR		6000
 #define	BUS_OVP_THRESHOLD		12000
+#define	APDO_MAX_VOLT		11000
 
 #define BUS_VOLT_INIT_UP		400
 
 #define BAT_VOLT_LOOP_LMT		BATT_MAX_CHG_VOLT
 #define BAT_CURR_LOOP_LMT		BATT_FAST_CHG_CURR
 #define BUS_VOLT_LOOP_LMT		BUS_OVP_THRESHOLD
+#define BUS_CURR_LOOP_LMT		(BATT_FAST_CHG_CURR >> 1)
 
 #define PM_WORK_RUN_NORMAL_INTERVAL		500
 #define PM_WORK_RUN_QUICK_INTERVAL		200
@@ -47,6 +53,9 @@ enum tcpm_psy_online_states {
 	TCPM_PSY_FIXED_ONLINE,
 	TCPM_PSY_PROG_ONLINE,
 };
+
+u32 usbpd_source_caps[PDO_MAX_OBJECTS];
+unsigned int usbpd_nr_source_caps;
 
 static bool get_psy_enabled(struct power_supply *psy)
 {
@@ -306,17 +315,86 @@ static void usbpd_pm_move_state(struct usbpd_pm *pdpm, enum pm_state state)
 	pdpm->state = state;
 }
 
-static void usbpd_pm_evaluate_src_caps(struct usbpd_pm *pdpm)
+static int usbpd_fetch_pdo(struct usbpd_pdo *pdos)
 {
-	// Only supports 33W mi charger, with pps 11V/3A max
-	pdpm->apdo_max_volt = 11000;
-	pdpm->apdo_max_curr = 3000;
-	pdpm->apdo_selected_pdo = 5;
+	int ret = 0;
+	int pdo;
+	int i;
+
+	if (!pdos)
+		return -EINVAL;
+
+	for (i = 0; i < usbpd_nr_source_caps; i++) {
+		pdo = usbpd_source_caps[i];
+		if (pdo == 0)
+			break;
+
+		pdos[i].pos = i + 1;
+		pdos[i].pps = (pdo_apdo_type(pdo) == APDO_TYPE_PPS);
+		pdos[i].type = pdo_type(pdo);
+
+		if (pdos[i].type == PDO_TYPE_FIXED) {
+			pdos[i].curr_ma = pdo_max_current(pdo);
+			pdos[i].max_volt_mv = pdo_fixed_voltage(pdo);
+			pdos[i].min_volt_mv = pdo_fixed_voltage(pdo);
+			pdbg("pdo:%d, Fixed supply, volt:%d(mv), max curr:%d\n",
+					i+1, pdos[i].max_volt_mv,
+					pdos[i].curr_ma);
+		} else if (pdos[i].type == PDO_TYPE_APDO) {
+			pdos[i].max_volt_mv = pdo_pps_apdo_max_voltage(pdo);
+			pdos[i].min_volt_mv = pdo_pps_apdo_min_voltage(pdo);
+			pdos[i].curr_ma     = pdo_pps_apdo_max_current(pdo);
+			pdbg("pdo:%d, PPS, volt: %d(mv), max curr:%d\n",
+					i+1, pdos[i].max_volt_mv,
+					pdos[i].curr_ma);
+		} else {
+			pdbg("only fixed and pps pdo supported\n");
+		}
+	}
+
+	return ret;
+}
+
+static int usbpd_pm_evaluate_src_caps(struct usbpd_pm *pdpm)
+{
+	int ret;
+	int i;
+
+	pdpm->apdo_max_volt = MIN_ADAPTER_VOLT_REQUIRED;
+	pdpm->apdo_max_curr = MIN_ADAPTER_CURR_REQUIRED;
+
+	if (usbpd_nr_source_caps == 0) {
+		return -EINVAL;
+	}
+
+	ret = usbpd_fetch_pdo(pdpm->pdo);
+	if (ret) {
+		pr_err("Failed to fetch pdo info\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < PDO_MAX_OBJECTS; i++) {
+		if (pdpm->pdo[i].type == PDO_TYPE_APDO
+			&& pdpm->pdo[i].pps && pdpm->pdo[i].pos) {
+			if (pdpm->pdo[i].max_volt_mv >= pdpm->apdo_max_volt
+					&& pdpm->pdo[i].curr_ma >= pdpm->apdo_max_curr
+					&& pdpm->pdo[i].max_volt_mv <= APDO_MAX_VOLT) {
+				pdpm->apdo_max_volt = pdpm->pdo[i].max_volt_mv;
+				pdpm->apdo_max_curr = pdpm->pdo[i].curr_ma;
+				pdpm->apdo_selected_pdo = pdpm->pdo[i].pos;
+			}
+		}
+	}
 
 	pdbg("PPS supported, preferred APDO pos:%d, max volt:%d, current:%d\n",
 				pdpm->apdo_selected_pdo,
 				pdpm->apdo_max_volt,
 				pdpm->apdo_max_curr);
+
+	if (pdpm->apdo_max_curr <= LOW_POWER_PPS_CURR_THR)
+		pdpm->apdo_max_curr = XIAOMI_LOW_POWER_PPS_CURR_MAX;
+
+	return 0;
 }
 
 static void usbpd_pm_disconnect(struct usbpd_pm *pdpm)
@@ -334,6 +412,9 @@ static void usbpd_pm_disconnect(struct usbpd_pm *pdpm)
 	if (pdpm->cp.charge_enabled) {
 		set_usbpd_cp_enable(pdpm, false);
 	}
+
+	memset(usbpd_source_caps, 0, sizeof(usbpd_source_caps));
+	usbpd_nr_source_caps = 0;
 
 	usbpd_pm_move_state(pdpm, PD_PM_STATE_ENTRY);
 }
@@ -370,8 +451,8 @@ static void usb_psy_change_work(struct work_struct *work)
 		pr_info("\n\n\npd_active = %d\n\n\n", pdpm->pd_active);
 		old_pps_status = pdpm->pd_active;
 		if (pdpm->pd_active) {
-			usbpd_pm_evaluate_src_caps(pdpm);
-			schedule_delayed_work(&pdpm->pm_work, 0);
+			if (usbpd_pm_evaluate_src_caps(pdpm) == 0)
+				schedule_delayed_work(&pdpm->pm_work, 0);
 		} else {
 			usbpd_pm_disconnect(pdpm);
 		}
@@ -455,7 +536,8 @@ static int usbpd_pm_sm(struct usbpd_pm *pdpm)
 		break;
 	case PD_PM_STATE_FC2_ENTRY_1:
 		pdpm->request_voltage = cp->vbat_volt * 2 + BUS_VOLT_INIT_UP;
-		pdpm->request_current = pdpm->apdo_max_curr - 50;
+		pdpm->request_current = min(pdpm->apdo_max_curr, pdpm->apdo_max_curr);
+		pdpm->request_current -= 50;
 
 		set_usbpd_pps_enable(pdpm, true);
 		set_usbpd_pps_voltage(pdpm, pdpm->request_voltage * 1000);
@@ -724,6 +806,15 @@ static int usbpd_parse_dt(struct usbpd_pm *pdpm)
 		config->bat_curr_lp_lmt = val;
 	}
 	pdbg("pm_config.bat_curr_lp_lmt:%d\n", config->bat_curr_lp_lmt);
+
+	rc = of_property_read_u32(node, "mi,pd-bus-curr-max", &val);
+	if (rc < 0) {
+		pr_err("pd-bus-curr-max property missing, use default val\n");
+		config->bus_curr_lp_lmt = BUS_CURR_LOOP_LMT;
+	} else {
+		config->bus_curr_lp_lmt = val;
+	}
+	pr_info("pm_config.bus_curr_lp_lmt:%d\n", config->bus_curr_lp_lmt);
 
 	return rc;
 }

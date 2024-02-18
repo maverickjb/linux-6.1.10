@@ -2547,6 +2547,8 @@ static int tcpm_register_sink_caps(struct tcpm_port *port)
 	return 0;
 }
 
+extern u32 usbpd_source_caps[PDO_MAX_OBJECTS];
+extern unsigned int usbpd_nr_source_caps;
 static void tcpm_pd_data_request(struct tcpm_port *port,
 				 const struct pd_message *msg)
 {
@@ -2575,6 +2577,9 @@ static void tcpm_pd_data_request(struct tcpm_port *port,
 
 		tcpm_validate_caps(port, port->source_caps,
 				   port->nr_source_caps);
+
+		memcpy(usbpd_source_caps, port->source_caps, sizeof(u32) * port->nr_source_caps);
+		usbpd_nr_source_caps = port->nr_source_caps;
 
 		tcpm_register_source_caps(port);
 

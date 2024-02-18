@@ -7,6 +7,11 @@
 #define pdbg(fmt, args...)
 #endif
 
+/* product related */
+#define LOW_POWER_PPS_CURR_THR			2000
+#define XIAOMI_LOW_POWER_PPS_CURR_MAX			1500
+#define XIAOMI_LOW_POWER_PPS_CURR_MAX			1500
+#define PPS_VOL_MAX			11000
 #define PPS_VOL_HYS			1000
 
 #define STEP_MV			20
@@ -35,9 +40,19 @@ static const char * const pm_states[] = {
 
 struct pdpm_config {
 	int bat_volt_lp_lmt; /*bat volt loop limit*/
-	int	bat_curr_lp_lmt;
+	int bat_curr_lp_lmt;
+	int bus_curr_lp_lmt;
 
 	int	fc2_taper_current;
+};
+
+struct usbpd_pdo {
+	bool pps;
+	int type;
+	int max_volt_mv;
+	int min_volt_mv;
+	int curr_ma;
+	int pos;
 };
 
 struct sw_device {
@@ -92,6 +107,8 @@ struct usbpd_pm {
 
 	struct sw_device sw;
 	struct cp_device cp;
+
+	struct usbpd_pdo pdo[PDO_MAX_OBJECTS];
 };
 
 #endif

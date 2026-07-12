@@ -5670,6 +5670,8 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	fg_psy_cfg.of_node = NULL;
 	fg_psy_cfg.supplied_to = NULL;
 	fg_psy_cfg.num_supplicants = 0;
+	fg_psy_cfg.attr_grp = NULL;
+	fg_psy_cfg.fwnode = NULL;
 	fg->fg_psy = devm_power_supply_register(fg->dev, &fg_psy_desc,
 			&fg_psy_cfg);
 	if (IS_ERR(fg->fg_psy)) {
